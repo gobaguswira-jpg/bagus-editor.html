@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>Bagus Editor — Simple AI Photo Editor</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; background:linear-gradient(135deg,#eef2ff,#fdf2f8); margin:0; padding:20px; }
+    .card { max-width:540px; margin:0 auto; background:#fff; border-radius:18px; padding:18px; box-shadow:0 10px 25px rgba(0,0,0,.1); position:relative; }
+    h1 { font-size:22px; margin:6px 0 2px; text-align:center; }
+    .logo { position:absolute; top:12px; left:12px; background:#6366f1; color:#fff; padding:6px 10px; border-radius:999px; font-size:12px; }
+    input, select, button { width:100%; margin-top:8px; padding:10px; border-radius:10px; border:1px solid #ddd; }
+    button { cursor:pointer; background:#6366f1; color:#fff; border:none; }
+    button.secondary { background:#0ea5e9; }
+    img, canvas { width:100%; margin-top:12px; border-radius:12px; }
+    .row { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+    .presets { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-top:6px; }
+    .preset { height:36px; border-radius:8px; border:1px solid #ddd; cursor:pointer; }
+    .photo-presets { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:6px; }
+    .photo { height:46px; border-radius:10px; background-size:cover; background-position:center; border:1px solid #ddd; cursor:pointer; }
+    small { color:#666; }
+
+    /* Splash */
+    #splash{ position:fixed; inset:0; background:linear-gradient(135deg,#6366f1,#0ea5e9); display:flex; align-items:center; justify-content:center; color:white; z-index:999; }
+    #splash h2{ font-weight:600; }
+  </style>
+</head>
+<body>
+
+<div id="splash"><h2>✨ Bagus Editor Loading...</h2></div>
+
+  <div class="card">
+    <div class="logo">Bagus Editor</div>
+    <h1>🖼️ Bagus Editor</h1>
+    <small style="display:block;text-align:center;margin-bottom:6px">Simple AI Photo Editor</small>
+
+    <small>1. Upload foto</small>
+    <input type="file" id="upload" accept="image/*" />
+
+    <small>2. Pilih filter</small>
+    <select id="filter">
+      <option value="none">Normal</option>
+      <option value="grayscale(100%)">Grayscale</option>
+      <option value="sepia(100%)">Sepia</option>
+      <option value="contrast(130%)">Contrast</option>
+      <option value="brightness(120%)">Bright</option>
+      <option value="blur(2px)">Soft Blur</option>
+    </select>
+
+    <small>3. Warna / gradient background</small>
+    <input type="color" id="bgColor" value="#ffffff" />
+
+    <div class="presets">
+      <div class="preset" style="background:#ffffff" onclick="setBg('#ffffff')"></div>
+      <div class="preset" style="background:#000000" onclick="setBg('#000000')"></div>
+      <div class="preset" style="background:linear-gradient(135deg,#0ea5e9,#6366f1)" onclick="setGradient('blue')"></div>
+      <div class="preset" style="background:linear-gradient(135deg,#fb7185,#facc15)" onclick="setGradient('sunset')"></div>
+    </div>
+
+    <small>4. Preset background foto</small>
+    <div class="photo-presets">
+      <div class="photo" style="background-image:url('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800')" onclick="setPhotoBg('beach')"></div>
+      <div class="photo" style="background-image:url('https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=800')" onclick="setPhotoBg('studio')"></div>
+      <div class="photo" style="background-image:url('https://images.unsplash.com/photo-1497366216548-37526070297c?w=800')" onclick="setPhotoBg('office')"></div>
+    </div>
+
+    <small>Masukkan API Key remove.bg</small>
+    <input type="password" id="apiKey" placeholder="remove.bg API key" />
+
+    <div class="row">
+      <button onclick="removeBackground()">Hapus Background</button>
+      <button class="secondary" onclick="download()">Download</button>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <div style="text-align:center;margin-top:10px;font-size:12px;color:#888">© 2026 Bagus Editor</div>
+
+    <small>Tips: buat API key gratis di remove.bg → upload → hapus background → pilih preset → download.</small>
+  </div>
+
+<script>
+setTimeout(()=>document.getElementById('splash').style.display='none',1200);
+
+const upload = document.getElementById('upload');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const filter = document.getElementById('filter');
+const bgColor = document.getElementById('bgColor');
+let currentImage = null;
+let bgMode = 'color';
+let gradientType = null;
+let photoBg = null;
+
+const photoSources = {
+  beach: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200',
+  studio: 'https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=1200',
+  office: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1200'
+};
+
+upload.addEventListener('change', e => {
+  const file = e.target.files[0];
+  const img = new Image();
+  img.onload = () => {
+    canvas.width = img.width;
+    canvas.height = img.height;
+    ctx.drawImage(img,0,0);
+    currentImage = img;
+  };
+  img.src = URL.createObjectURL(file);
+});
+
+filter.addEventListener('change', applyFilter);
+
+function applyFilter(){ redraw(); }
+
+function setBg(color){ bgMode='color'; gradientType=null; photoBg=null; bgColor.value=color; redraw(); }
+function setGradient(type){ bgMode='gradient'; gradientType=type; photoBg=null; redraw(); }
+function setPhotoBg(type){ bgMode='photo'; photoBg=type; redraw(); }
+
+function drawBackground(){
+  if(bgMode==='photo' && photoBg){
+    const bg = new Image();
+    bg.crossOrigin='anonymous';
+    bg.onload=()=>{ ctx.drawImage(bg,0,0,canvas.width,canvas.height); drawImage(); };
+    bg.src = photoSources[photoBg];
+    return;
+  }
+
+  if(bgMode==='color'){
+    ctx.fillStyle = bgColor.value;
+  } else {
+    let g = ctx.createLinearGradient(0,0,canvas.width,canvas.height);
+    if(gradientType==='sunset'){ g.addColorStop(0,'#fb7185'); g.addColorStop(1,'#facc15'); }
+    else { g.addColorStop(0,'#0ea5e9'); g.addColorStop(1,'#6366f1'); }
+    ctx.fillStyle = g;
+  }
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+}
+
+function drawImage(){
+  if(!currentImage) return;
+  ctx.filter = filter.value;
+  ctx.drawImage(currentImage,0,0);
+}
+
+function redraw(){
+  if(!currentImage) return;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawBackground();
+  if(bgMode!=='photo') drawImage();
+}
+
+async function removeBackground(){
+  if(!upload.files[0]) return alert('Upload foto dulu');
+  const key = document.getElementById('apiKey').value;
+  if(!key) return alert('Masukkan API key remove.bg');
+
+  const formData = new FormData();
+  formData.append('image_file', upload.files[0]);
+  formData.append('size','auto');
+
+  const res = await fetch('https://api.remove.bg/v1.0/removebg',{
+    method:'POST',
+    headers:{ 'X-Api-Key': key },
+    body: formData
+  });
+
+  if(!res.ok){ alert('Gagal hapus background'); return; }
+
+  const blob = await res.blob();
+  const img = new Image();
+  img.onload = () => {
+    canvas.width = img.width;
+    canvas.height = img.height;
+    currentImage = img;
+    redraw();
+  };
+  img.src = URL.createObjectURL(blob);
+}
+
+function download(){
+  const link = document.createElement('a');
+  link.download = 'bagus-editor.png';
+  link.href = canvas.toDataURL();
+  link.click();
+}
+</script>
+</body>
+</html>
